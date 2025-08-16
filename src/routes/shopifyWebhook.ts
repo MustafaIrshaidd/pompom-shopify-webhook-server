@@ -2,10 +2,13 @@ import express from "express";
 import crypto from "crypto";
 import { shopifyOrderSchema } from "../schemas/shopifyOrder";
 import { orderToWhatsAppMessage } from "../utils/whatsappMessage";
+import WhatsAppService from "../utils/whatsappService";
 
 const router = express.Router();
 
-router.post("/orders", (req, res) => {
+router.post("/orders", async (req, res) => {
+  // Console log all environment variables (for debugging purposes)
+
   const hmac = req.get("X-Shopify-Hmac-SHA256") || "";
   const secret = process.env.SHOPIFY_WEBHOOK_SECRET || "";
 
@@ -32,13 +35,66 @@ router.post("/orders", (req, res) => {
     console.log("✅ New order received:", parsedOrder.name);
     console.log("📱 WhatsApp message ready:\n", whatsappMsg);
 
-    // Return the WhatsApp message in the response
-    res.json({
-      success: true,
-      orderId: parsedOrder.name,
-      whatsappMessage: whatsappMsg,
-      message: "Order processed successfully"
-    });
+    // Extract customer phone number from the order
+    const customerPhone = parsedOrder.shipping_address.phone;
+    
+    if (!customerPhone) {
+      console.warn("⚠️ No phone number found for customer, cannot send WhatsApp message");
+      return res.status(200).json({
+        success: true,
+        orderId: parsedOrder.name,
+        message: "Order processed successfully, but no phone number for WhatsApp"
+      });
+    }
+
+        // Send WhatsApp message using the service with retry logic
+    const whatsappService = new WhatsAppService();
+    
+    // Extract required parameters for Arabic order confirmation template
+    const customerName = parsedOrder.billing_address.first_name || 'Customer';
+    const orderId = parsedOrder.name;
+    const orderDate = new Date(parsedOrder.created_at).toLocaleDateString('ar-SA');
+    const orderDescription = parsedOrder.line_items.map(item => item.title).join(', ');
+    const amount = `$${parseFloat(parsedOrder.total_price).toFixed(2)}`;
+    const primaryAddress = parsedOrder.shipping_address.address1 || '';
+    const secondaryAddress = parsedOrder.shipping_address.city || '';
+    
+    // Use the new retry method from WhatsApp service
+    const result = await whatsappService.sendArabicOrderConfirmationTemplateWithRetry(
+      customerPhone,
+      customerName,
+      orderId,
+      orderDate,
+      orderDescription,
+      amount,
+      primaryAddress,
+      secondaryAddress
+    );
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        orderId: parsedOrder.name,
+        customerName,
+        orderDate,
+        amount,
+        phoneNumber: result.phoneNumber,
+        originalPhone: customerPhone,
+        message: "Order processed and Arabic order confirmation template sent successfully"
+      });
+    } else {
+      console.error("❌ Failed to send WhatsApp message:", result.error);
+      
+      res.json({
+        success: true,
+        orderId: parsedOrder.name,
+        whatsappMessage: whatsappMsg,
+        originalPhone: customerPhone,
+        whatsappError: result.error,
+        message: "Order processed successfully, but WhatsApp message failed"
+      });
+    }
+
   } catch (error) {
     console.error("❌ Error processing webhook:", error);
     return res.status(400).json({
