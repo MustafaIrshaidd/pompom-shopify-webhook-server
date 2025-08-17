@@ -121,8 +121,40 @@ class WhatsAppService {
     amount: string, 
     primary_address: string, 
     secondary_address: string
-  ): Promise<{ success: boolean; phoneNumber: string | null; error?: string }> {
-    // Normalize phone numbers for both IL and PS
+  ): Promise<any> {
+    // Check if phone number already has country code (is already normalized)
+    // Try to parse without specifying a region - if it works, it already has a country code
+    try {
+      const { parsePhoneNumberFromString } = await import('libphonenumber-js');
+      const phoneWithCountryCode = parsePhoneNumberFromString(customerPhone);
+      
+      console.log(phoneWithCountryCode && phoneWithCountryCode.isValid() && phoneWithCountryCode.country)
+      if (phoneWithCountryCode && phoneWithCountryCode.isValid() && phoneWithCountryCode.country) {
+        console.log("📱 Phone number already has country code, sending directly:", phoneWithCountryCode.number);
+        try {
+          const result = await this.sendArabicOrderConfirmationTemplate(
+            phoneWithCountryCode.number,
+            customer_name,
+            order_id,
+            order_date,
+            order_description,
+            amount,
+            primary_address,
+            secondary_address
+          );
+          console.log("✅ WhatsApp message sent successfully to normalized number:", phoneWithCountryCode.number);
+          return result;
+        } catch (error) {
+          console.log("❌ Failed to send to normalized number:", phoneWithCountryCode.number, "Error:", error instanceof Error ? error.message : "Unknown error");
+          // If normalized number fails, fall back to IL/PS logic
+          console.log("🔄 Falling back to IL/PS normalization...");
+        }
+      }
+    } catch (error) {
+      console.log("📱 Could not parse phone number without region, proceeding with IL/PS normalization...");
+    }
+
+    // Normalize phone numbers for both IL and PS (only if needed)
     const ilPhone = normalizeWhatsAppNumber(customerPhone, "IL");
     const psPhone = normalizeWhatsAppNumber(customerPhone, "PS");
     
@@ -133,13 +165,11 @@ class WhatsAppService {
         error: "Could not normalize phone number for both IL and PS"
       };
     }
-    
-    console.log("📱 Phone numbers normalized - IL:", ilPhone, "PS:", psPhone);
-    
+
     let successPhone = null;
     let lastError = null;
 
-    console.log("hello world")
+    console.log(ilPhone, ' | ', psPhone)
 
     let result : any
     
@@ -160,7 +190,6 @@ class WhatsAppService {
         
         successPhone = ilPhone;
         console.log("✅ Arabic order confirmation template sent successfully to IL number:", ilPhone);
-        return { success: true, phoneNumber: ilPhone };
       } catch (error) {
         console.log("❌ Failed to send to IL number:", ilPhone, "Error:", error instanceof Error ? error.message : "Unknown error");
         lastError = error instanceof Error ? error.message : "Unknown error";
@@ -184,7 +213,6 @@ class WhatsAppService {
         
         successPhone = psPhone;
         console.log("✅ Arabic order confirmation template sent successfully to PS number:", psPhone);
-        return { success: true, phoneNumber: psPhone };
       } catch (error) {
         console.log("❌ Failed to send to PS number:", psPhone, "Error:", error instanceof Error ? error.message : "Unknown error");
         lastError = error instanceof Error ? error.message : "Unknown error";
@@ -192,7 +220,7 @@ class WhatsAppService {
     }
     
     // Both attempts failed
-    console.error("❌ Failed to send WhatsApp message to both IL and PS numbers");
+    // console.error("❌ Failed to send WhatsApp message to both IL and PS numbers");
     return result;
   }
 

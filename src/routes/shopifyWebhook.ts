@@ -55,7 +55,7 @@ router.post("/orders", async (req, res) => {
     const orderId = parsedOrder.name;
     const orderDate = new Date(parsedOrder.created_at).toLocaleDateString('ar-SA');
     const orderDescription = parsedOrder.line_items.map(item => item.title).join(', ');
-    const amount = `$${parseFloat(parsedOrder.total_price).toFixed(2)}`;
+    const amount = `₪${parseFloat(parsedOrder.total_price).toFixed(2)}`;
     const primaryAddress = parsedOrder.shipping_address.address1 || '';
     const secondaryAddress = parsedOrder.shipping_address.city || '';
     

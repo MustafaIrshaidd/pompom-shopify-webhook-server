@@ -4,7 +4,7 @@ import WhatsAppService from "../src/utils/whatsappService";
 
 describe("WhatsApp Service", () => {
   let whatsappService: WhatsAppService;
-  const testPhone = "+970595829020";
+  const testPhone = "970595829020";
 
   beforeEach(() => {
     whatsappService = new WhatsAppService();
@@ -29,7 +29,7 @@ describe("WhatsApp Service", () => {
 
   it("should send to palestinian phone number successfully even if i defined it as israeli", async () => {
     const result = await whatsappService.sendArabicOrderConfirmationTemplateWithRetry(
-      "0595829020",
+      "595829020",
       "John Smith", // customer_name
       "ORD-2024-001", // order_id
       "August 15, 2024", // order_date
